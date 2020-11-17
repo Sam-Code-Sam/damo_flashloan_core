@@ -160,7 +160,7 @@ contract PureFlashVault is ERC20,ReentrancyGuard,IPureVault{
     uint256 profit = curBalance.sub(preBalance);
     //利润一定要大于当前最低利息
     require(profit>minFee(amount),"NEED_TRANSFER_BACK");
-    //利润的10%发送给社区
+    //利润的20%用于回购PFL
     uint256 pfProfit = profit.mul(m_profit_rate).div(10000);
     m_token.safeTransfer(m_profitpool,pfProfit);
 

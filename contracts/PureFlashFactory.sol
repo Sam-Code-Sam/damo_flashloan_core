@@ -16,7 +16,7 @@ contract PureFlashFactory is SafeOwnable{
   using SafeERC20 for IERC20;
   using Math for uint256;
   address[] public m_valts;
-  mapping(address=>address) public m_token_valts;
+  mapping(address=>address) public m_token_vaults;
   //保险柜默认参数
   address m_token;
   address m_profit_pool;
@@ -46,26 +46,26 @@ contract PureFlashFactory is SafeOwnable{
   }
   
   function changeSymbol(address token,string memory sym) onlyOwner external returns(bool){
-    address valt = m_token_valts[token];
+    address valt = m_token_vaults[token];
     require(valt != address(0),"NO_TOKEN_VALT");
     return IPureVault(valt).changeSymbol(sym);
   }
 
 
   function setPool(address token,address profitpool) onlyOwner public returns(bool){
-    address valt = m_token_valts[token];
+    address valt = m_token_vaults[token];
     require(valt != address(0),"NO_TOKEN_VALT");
     return IPureVault(valt).setPool(profitpool);
   }
   
   function setProfitRate(address token,uint256 profitrate) onlyOwner public returns(bool){
-    address valt = m_token_valts[token];
+    address valt = m_token_vaults[token];
     require(valt != address(0),"NO_TOKEN_VALT");
     return IPureVault(valt).setProfitRate(profitrate);
   }
 
   function setLoanFee(address token,uint256 loanfee) onlyOwner public returns(bool){
-    address valt = m_token_valts[token];
+    address valt = m_token_vaults[token];
     require(valt != address(0),"NO_TOKEN_VALT");
     return IPureVault(valt).setLoanFee(loanfee);
   }
@@ -76,11 +76,11 @@ contract PureFlashFactory is SafeOwnable{
   }
 
   function getVault(address token) public view returns(address){
-        return m_token_valts[token];
+        return m_token_vaults[token];
   }
 
   function getVaultBalance(address token) public view returns(uint256){
-      address valt = m_token_valts[token];
+      address valt = m_token_vaults[token];
       require(valt != address(0),"NO_TOKEN_VALT");
       return IPureVault(valt).balance();
   }
@@ -94,12 +94,12 @@ contract PureFlashFactory is SafeOwnable{
  
   //通用存款方法，存入的时候如果没有对应的保险柜，则自动创建
   function createValt(string memory sym,address token,uint256 amount) public{
-      address valt = m_token_valts[token];
+      address valt = m_token_vaults[token];
       require(valt == address(0),"EXIST_VALT"); 
       //constructor(address factory,address token,address profitpool,uint256 profitrate,uint256 loadfee)
       PureFlashVault newValt = new PureFlashVault(address(this),sym,token,m_profit_pool,m_profit_rate,m_loan_fee);
       address addr =  address(newValt);
-      m_token_valts[token]  = addr;
+      m_token_vaults[token]  = addr;
       m_valts.push(addr); 
       //deposit
       if(amount >0){ 
@@ -112,7 +112,7 @@ contract PureFlashFactory is SafeOwnable{
               newValt.depositFor(amount,msg.sender);
           }
       }
-      //为创建者发放token奖励
+      //为创建者发放token奖励 
       if(m_create_reward > 0){
           uint256 pflBalance = IERC20(m_token).balanceOf(address(this));
           if(pflBalance > m_create_reward){
@@ -120,5 +120,51 @@ contract PureFlashFactory is SafeOwnable{
           }
       }
   } 
+
+
+  function onlyFromVault(address token) private view returns(bool){
+      address vaultAddr =  m_token_vaults[token];
+      return msg.sender == vaultAddr;
+  }
+
+  /**
+  * 根据token金额，换算出应该奖励多少币
+  * 基于UNISwap的定价：
+  *、bug1：如果用户发一个假币，把价格定得很高，然后不停的存入。
+  *、    （解决：限制单次最大金额为perETH的奖励的币数,该数目的价值不能超过手续费）
+  */
+  function getReward(address token,uint256 perETH,uint256 amount) public returns(uint256){
+
+      ISwap(m_swap).getAmountsOut(amount,)
+  }
+    
+  /**
+  * 自动发放用户存款奖励,要求只能从Vault调用
+  *b bug1：如果用户不停的存入，取出，就可以不停的获得奖励，但是需要交纳手续费。
+  *        （解决：限制单次最大金额为perETH的奖励的币数,该数目的价值不能超过手续费）
+  */
+  function onUserDeposit(address user,address token,address amount) external{
+       require(onlyFromVault(token),"NOT_VAULT");
+       if(m_deposit_reward > 0){
+          uint256 pflBalance = IERC20(m_token).balanceOf(address(this));
+          if(pflBalance > m_create_reward){
+              IERC20(m_token).safeTransfer(msg.sender,m_create_reward);
+          }
+      }
+  }
+
+  /**
+  * 自动发放用户贷款奖励,要求只能从Vault调用
+  */
+  function onUserLoan(address user,address token,address amount)  external{
+    require(onlyFromVault(token),"NOT_VAULT");
+     if(m_create_reward > 0){
+          uint256 pflBalance = IERC20(m_token).balanceOf(address(this));
+          if(pflBalance > m_create_reward){
+              IERC20(m_token).safeTransfer(msg.sender,m_create_reward);
+          }
+      }
+  }
+
 
 }
