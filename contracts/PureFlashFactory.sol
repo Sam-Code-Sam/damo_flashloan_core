@@ -12,9 +12,18 @@ import "./@libs/SafeOwnable.sol";
 import "./PureFlashVault.sol";
 
 
+
 contract PureFlashFactory is SafeOwnable{
   using SafeERC20 for IERC20;
   using Math for uint256;
+  struct PFLReward{
+    uint256 createVault;              //创建valut获得的PFL奖励数
+    uint256 depositPerETH;            //存入1ETH获得的PFL奖励数
+    uint256 loanPerETH;               //贷款1ETH获得的PFL奖励数
+    uint256 maxPFLReward;             //单笔最大奖励数，和手续费等值挂钩，防止被薅羊毛
+  }
+
+
   address[] public m_valts;
   mapping(address=>address) public m_token_vaults;
   //保险柜默认参数
@@ -23,7 +32,7 @@ contract PureFlashFactory is SafeOwnable{
   uint256 m_profit_rate;  //基准值：10000
   uint256 m_loan_fee;     //基准值： MAX_LOAN_FEE = 100*10000;
   //创建保险柜的奖励
-  uint256 m_create_reward;
+  PFLReward m_reward; 
   constructor(address token,address profitpool){
      m_token = token;
      m_profit_pool = profitpool;
@@ -113,7 +122,7 @@ contract PureFlashFactory is SafeOwnable{
           }
       }
       //为创建者发放token奖励 
-      if(m_create_reward > 0){
+      if(m_reward > 0){
           uint256 pflBalance = IERC20(m_token).balanceOf(address(this));
           if(pflBalance > m_create_reward){
               IERC20(m_token).safeTransfer(msg.sender,m_create_reward);
@@ -131,11 +140,11 @@ contract PureFlashFactory is SafeOwnable{
   * 根据token金额，换算出应该奖励多少币
   * 基于UNISwap的定价：
   *、bug1：如果用户发一个假币，把价格定得很高，然后不停的存入。
-  *、    （解决：限制单次最大金额为perETH的奖励的币数,该数目的价值不能超过手续费）
+  *、    （解决：限制单次最大奖励的币数max_reward,该数目的价值不能超过手续费）
   */
   function getReward(address token,uint256 perETH,uint256 amount) public returns(uint256){
-
-      ISwap(m_swap).getAmountsOut(amount,)
+      bytes memory 
+      IExchange(m_swap).getAmountsOut(amount,)
   }
     
   /**
@@ -143,7 +152,7 @@ contract PureFlashFactory is SafeOwnable{
   *b bug1：如果用户不停的存入，取出，就可以不停的获得奖励，但是需要交纳手续费。
   *        （解决：限制单次最大金额为perETH的奖励的币数,该数目的价值不能超过手续费）
   */
-  function onUserDeposit(address user,address token,address amount) external{
+  function onUserDeposit(address user,address token,uint256 amount) external{
        require(onlyFromVault(token),"NOT_VAULT");
        if(m_deposit_reward > 0){
           uint256 pflBalance = IERC20(m_token).balanceOf(address(this));
@@ -153,10 +162,31 @@ contract PureFlashFactory is SafeOwnable{
       }
   }
 
+  //将FPL奖励发放给Vautl合约，由Vault自己取
+  function sendRewardToTokenVault(address token) external{
+      address vaultAddr =  m_token_vaults[token];
+      require(vaultAddr != address(0),"NOT_VAULT");
+      //检查时间
+      uint256 lastRewardTime = m_next_reward_time[valtAddr];
+      //获取领取间隔
+      uint256 rHours = (block.timestamp - lastRewardTime).div(60*60);
+      if(rHours > 0){
+          //计算每个小时的奖励
+          uint256 count = valtCount();
+          uint256 rewardPerHour = m_reward.depositPerWeei.div(count).div(7*24);
+          //计算本次可领取的数目
+          uint256 curReward = rewardPerHour.mul(rHours);
+          //设置时间
+          m_next_reward_time[valtAddr] = block.timestamp;
+          //发送奖励到对应的合约
+          IERC20(m_token).safeTransfer(vaultAddr,curReward);
+      }
+  }
+
   /**
   * 自动发放用户贷款奖励,要求只能从Vault调用
   */
-  function onUserLoan(address user,address token,address amount)  external{
+  function onDealerLoanStart(address dealer,address token,uint256 amount)  external{
     require(onlyFromVault(token),"NOT_VAULT");
      if(m_create_reward > 0){
           uint256 pflBalance = IERC20(m_token).balanceOf(address(this));

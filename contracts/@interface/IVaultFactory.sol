@@ -15,4 +15,7 @@ interface IVaultFactory {
     function getVault(address token) external returns(address);
     function getVaultBalance(address token) external returns(uint256);
     function startFlashLoan(address dealer,uint256 amount,bytes calldata userdata) external;
+    //PFL奖励回调
+    function onUserDeposit(address user,address token,uint256 amount) external;
+    function onDealerLoanStart(address dealer,address token,uint256 amount)  external;
 }

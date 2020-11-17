@@ -8,12 +8,13 @@ import "./@openzeppelin/contracts/math/SafeMath.sol";
 import "./@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./@interface/IPureFlash.sol";
 import "./@interface/IPureVault.sol";
+import "./@interface/IVaultFactory.sol";
 import "./@libs/ERC20Detailed.sol";
 
 contract PureFlashVault is ERC20,ReentrancyGuard,IPureVault{
   using SafeMath  for uint256;
   using SafeERC20 for IERC20;
-  
+  IERC20 m_pfl;
   IERC20 m_token;
   string  m_symbol;
   address m_factory;
@@ -113,6 +114,8 @@ contract PureFlashVault is ERC20,ReentrancyGuard,IPureVault{
         //保存存款数据
         m_total_deposits = m_total_deposits.add(amount);
         m_users_deposit[user] = m_users_deposit[user].add(amount);
+        //存款后发放PFL奖励
+        IVaultFactory(m_factory).onUserDeposit(msg.sender,address(m_token),amount);
         return shares;
    }
 
@@ -124,11 +127,21 @@ contract PureFlashVault is ERC20,ReentrancyGuard,IPureVault{
     function withdraw(uint256 shares) nonReentrant public override returns(uint256){
          address user = msg.sender;
         // 当前合约和控制器合约在基础资产的余额 * 份额 / 总量
-        uint256 amount = (balance().mul(shares)).div(totalSupply());
+        uint256 amount = (balance().mul(shares)).div(totalSupply());        
+        //计算PFL奖励
+        uint256 pflBalance = m_pfl.balanceOf(address(this));
+        uint256 pflReword = 0;
+        if(pflBalance > 0){
+            pflReword = (pflBalance.mul(shares)).div(totalSupply());
+        }       
         // 销毁份额
         _burn(user, shares); 
         //打款给用户
         m_token.safeTransfer(user, amount);
+        //发放PFL奖励
+        if(pflReword > 0){
+            m_pfl.safeTransfer(user, pflReword);
+        }
         //记录更改前的deposit值
         uint256 oldDeposit = m_users_deposit[user];
          //当取出金额大于本金时，记录历史利润
@@ -154,6 +167,9 @@ contract PureFlashVault is ERC20,ReentrancyGuard,IPureVault{
     m_token.safeTransfer(dealer,amount);
     //调用借贷者自己的借贷函数
     uint256 rAmount = amount.add(minFee(amount));
+    //将PFL奖励打给dealer合约，由开发者自由分配
+    IVaultFactory(m_factory).onDealerLoanStart(dealer,address(m_token),amount);
+    //调用借款人的合约
     IPureFlash(dealer).OnFlashLoan(address(m_token),amount,rAmount, data);
     //开始检查是否返款
     uint256 curBalance = m_token.balanceOf(address(this));

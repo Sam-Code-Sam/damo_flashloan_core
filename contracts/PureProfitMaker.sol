@@ -33,6 +33,10 @@ contract PureProfitMaker is SafeOwnable{
          address goverance = msg.sender; 
          IERC20(m_token).safeTransfer(goverance,amount);
      }
+
+     function addLiqulity(){
+         
+     }
      
      //2、社区利润池定期再回购FEA接口
      //exchange 交易所地址，amount，回购的PFL数量
