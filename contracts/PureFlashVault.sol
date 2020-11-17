@@ -70,7 +70,7 @@ contract PureFlashVault is ERC20,ReentrancyGuard,IPureVault{
         sym  = m_symbol;
         addr = address(m_token);
         tvl  = balance();
-        fee  = minFee(100*1e18);
+        fee  = minFee(100*1e18);  //默认为借100个币的手续费
         s    = sharePrice();
         td   = m_total_deposits;
     }
@@ -117,11 +117,11 @@ contract PureFlashVault is ERC20,ReentrancyGuard,IPureVault{
    }
 
     //这里不应该用nonReentrant
-    function deposit(uint256 amount) /*nonReentrant*/ public returns(uint256){
+    function deposit(uint256 amount) /*nonReentrant*/ public  override returns(uint256){
         return depositFor(amount,msg.sender); 
    }
 
-    function withdraw(uint256 shares) nonReentrant public returns(uint256){
+    function withdraw(uint256 shares) nonReentrant public override returns(uint256){
          address user = msg.sender;
         // 当前合约和控制器合约在基础资产的余额 * 份额 / 总量
         uint256 amount = (balance().mul(shares)).div(totalSupply());
@@ -148,7 +148,7 @@ contract PureFlashVault is ERC20,ReentrancyGuard,IPureVault{
      return  pool > 0 ? m_loan_fee.mul(amount).div(pool).div(MAX_LOAN_FEE) : 0;
   }
 
-  function startFlashLoan(address dealer,uint256 amount,bytes calldata data) nonReentrant public{
+  function startFlashLoan(address dealer,uint256 amount,bytes calldata data) nonReentrant public override{
     uint256 preBalance = m_token.balanceOf(address(this));
     //把借贷的资产转给贷款人
     m_token.safeTransfer(dealer,amount);
